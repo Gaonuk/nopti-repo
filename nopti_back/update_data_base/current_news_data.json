@@ -1,0 +1,29 @@
+{
+    "news_list": [
+        {
+            "title": "Dow Jones Futures: Stay Cool In Hot Market; Forget Nvidia, Meet The New AI Chip Leader",
+            "link": "https://www.investors.com/market-trend/stock-market-today/dow-jones-futures-forget-nvidia-ai-chip-leader-astera-labs/&ved=2ahUKEwjw4NW8sPKJAxWuaqQEHWqoH-cQxfQBegQIBhAC&usg=AOvVaw2_07DcQKhXkXyNDLBEKEGw",
+            "date": "8 hours ago",
+            "summary": "Dow Jones futures: The stock market rally is hot, but keep a cool head. Nvidia is the giant, but Astera Labs is the new AI chip stock leader.",
+            "passed": false,
+            "source": "Google News",
+            "id": 1
+        },
+        {
+            "title": "Creator of Node talks Deno 2.0 and the Future of JS. Published by ThePrimeTime",
+            "link": "https://www.youtube.com/watch?v=2x2eIhn2BJM",
+            "date": "2024-11-12T13:45:06Z",
+            "summary": "https://www.coderabbit.ai Twitch https://twitch.tv/ThePrimeagen Discord https://discord.gg/ThePrimeagen https://www.coderabbit.ai ...",
+            "source": "Youtube",
+            "id": 2
+        },
+        {
+            "title": "\u79c1\u9054\u3092\u4fe1\u3058\u3066\u3044\u3066 by Cindy",
+            "link": "https://open.spotify.com/track/4xu0gZ96zx1G7UdajUGDqD",
+            "summary": "Artist: Cindy, Album: Angel Touch, Played at: 2024-11-22T00:38:53.276Z",
+            "source": "Spotify",
+            "date": "2024-11-22T00:38:53.276Z",
+            "id": 3
+        }
+    ]
+}
