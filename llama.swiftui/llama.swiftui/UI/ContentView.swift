@@ -23,6 +23,11 @@ struct ContentView: View {
     
     @State private var recognizedWords: [String] = []
     
+    @State private var spotifyTrackId: String = ""
+    
+    private let hardcodedInputs = ["summarize", "next", "play"]
+    @State private var currentInputIndex = 0
+    
     var body: some View {
         ZStack {
             if isLoading {
@@ -122,6 +127,25 @@ struct ContentView: View {
         }
     }
     
+    func playSummary() async {
+        do {
+            guard let url = URL(string: "https://5646-84-14-112-188.ngrok-free.app/get-decision?user_input=summarize") else {
+                print("Invalid URL")
+                return
+            }
+            let (data, _) = try await URLSession.shared.data(from: url)
+            audioPlayer = try AVAudioPlayer(data: data)
+            audioPlayer?.play()
+            
+            while audioPlayer?.isPlaying == true {
+                try await Task.sleep(nanoseconds: 100_000_000)
+            }
+            
+        } catch {
+            print("Error playing audio: \(error)")
+        }
+    }
+    
     func playContent() async {
         do {
             guard let url = URL(string: "https://5646-84-14-112-188.ngrok-free.app/content") else {
@@ -155,6 +179,8 @@ struct ContentView: View {
         }
     }
     
+    let count = 0;
+    
     func stopListening() {
         if audioEngine.isRunning {
             audioEngine.stop()
@@ -163,14 +189,18 @@ struct ContentView: View {
         
         isListening = false
         processVoiceInput(recognizedText)
+        
+//        Task {
+//            await playSummary()
+//        }
+        
+        Task {
+            await getSpotifyTrackId()
+        }
     }
     
     func processVoiceInput(_ input: String) {
         llamaState.messageLog += "\nUser: \(input)"
-        Task {
-            let response = await llamaState.complete(text: input)
-            playAudio(url: URL(string: "https://filesamples.com/samples/audio/m4a/sample3.m4a"))
-        }
     }
     
     func playAudio(fileName: String? = nil, url: URL? = nil, data: Data? = nil) {
@@ -250,6 +280,28 @@ struct ContentView: View {
             }
         }
     }
+    
+    func fetchDecision() async {
+        do {
+            let currentInput = hardcodedInputs[currentInputIndex]
+            
+            currentInputIndex = (currentInputIndex + 1) % hardcodedInputs.count
+            
+            let decision = try await NetworkManager.shared.getDecision(userInput: currentInput)
+            
+            await MainActor.run {
+                if let audioData = decision.audio {
+                    playAudio(data: audioData)
+                }
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = "Error: \(error.localizedDescription)"
+                print("Error details: \(error)")
+            }
+        }
+    }
+
 
     func getDecision() async {
         do {
@@ -257,8 +309,6 @@ struct ContentView: View {
             await MainActor.run {
                 if let audioData = decision.audio {
                     playAudio(data: audioData)
-                } else if let action = decision.action {
-                    print("Decision action: \(action)")
                 }
             }
         } catch {
@@ -274,6 +324,43 @@ struct ContentView: View {
             }
         } catch {
             print("Error fetching content: \(error)")
+        }
+    }
+    
+    func getSpotifyTrackId() async {
+        do {
+            guard let url = URL(string: "https://5646-84-14-112-188.ngrok-free.app/current-track-id") else {
+                print("Invalid URL")
+                return
+            }
+            
+            let (data, _) = try await URLSession.shared.data(from: url)
+            
+            let responseDict = try JSONDecoder().decode([String: String].self, from: data)
+            
+            if let trackId = responseDict["track_id"] {
+                self.spotifyTrackId = trackId
+                openSpotifyApp(with: trackId)
+            } else if let errorMessage = responseDict["error"] {
+                print("Error getting Spotify track ID: \(errorMessage)")
+            } else {
+                print("Unexpected response format")
+            }
+        } catch {
+            print("Error getting Spotify track ID: \(error)")
+        }
+    }
+    
+    func openSpotifyApp(with trackId: String) {
+        guard let url = URL(string: "spotify://track/\(trackId)") else {
+            print("Invalid Spotify URL")
+            return
+        }
+        
+        UIApplication.shared.open(url, options: [:]) { success in
+            if !success {
+                print("Failed to open Spotify app")
+            }
         }
     }
 }
