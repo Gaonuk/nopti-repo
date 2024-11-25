@@ -23,7 +23,5 @@ python-multipart
 
 spotipy
 llama-stack
-"llama-cpp-python[server]"
-llama.cpp
 sqlalchemy
 elevenlabs
