@@ -16,12 +16,13 @@ api_key = os.getenv("OPENAI_API_KEY")
 
 
 def summarize_text(input_text: str) -> str:
-    client = OpenAI(
-    base_url="http://127.0.0.1:8111/v1",  # Assuming LLM Studio uses the /v1 endpoint
-    api_key="not-needed",  # LLM studio often doesn't need a key. You can use any placeholder string if needed.
-)
+    if not isinstance(input_text, str):
+        input_text = str(input_text)
+    print(input_text)
+
+    client = OpenAI(api_key=api_key)
     response = client.chat.completions.create(
-        model="noneed",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": input_text},
