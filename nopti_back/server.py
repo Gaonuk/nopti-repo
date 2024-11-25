@@ -1,5 +1,5 @@
-from typing import List, Optional
-from fastapi import FastAPI, Response
+from typing import List
+from fastapi import BackgroundTasks, FastAPI
 from openai import OpenAI
 import uvicorn
 from pydantic import BaseModel
@@ -18,37 +18,46 @@ app = FastAPI()
 # Store content rankings in memory
 content_rankings: List[ContentEntity] = []
 content_number = 0
+
+
 class QueryInput(BaseModel):
     text: str
+
 
 @app.get("/")
 def read_root():
     return {"status": "running", "timestamp": datetime.now().isoformat()}
 
+
 @app.get("/hello")
 def hello():
-    text = "Hi I am Nopty, here to help you make the most of your day ! Fetching News..."
+    text = (
+        "Hi I am Nopty, here to help you make the most of your day ! Fetching News..."
+    )
     audio_data = text_to_speech(text)
     if audio_data:
         # Create temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
             temp_file.write(audio_data)
             temp_path = temp_file.name
-        
-        # Return FileResponse and cleanup after
-        return FileResponse(
-            temp_path,
-            media_type="audio/mpeg",
-            background=lambda: os.unlink(temp_path)  # Cleanup temp file after sending
-        )
+
+        async def cleanup_file():
+            try:
+                os.unlink(temp_path)
+            except Exception as e:
+                print(f"Error cleaning up file: {e}")
+
+        # Return FileResponse with async cleanup
+        return FileResponse(temp_path, media_type="audio/mpeg", background=cleanup_file)
     return {"error": "Failed to generate speech"}
+
 
 @app.get("/content")
 async def get_content():
     """Fetch and return all available content"""
     global content_rankings
     global content_number
-    
+
     # Get fresh content if none exists
     if not content_rankings:
         news_data = get_update_news()
@@ -63,65 +72,91 @@ async def get_content():
                     date=item["date"],
                     type="article",
                     passed=False,
-                    shown=False
+                    shown=False,
                 )
             )
-    
+
     # Return audio response in same format as /hello endpoint
     current_content = content_rankings[content_number]
-    speech_data = text_to_speech("Here is the first content of the day I recommend you to read : " + current_content.summary)
-    
+    speech_data = text_to_speech(
+        "Here is the first content of the day I recommend you to read : "
+        + current_content.summary
+    )
+
     if speech_data:
         # Create temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
             temp_file.write(speech_data)
             temp_path = temp_file.name
-        
+
+        async def cleanup_file():
+            try:
+                os.unlink(temp_path)
+            except Exception as e:
+                print(f"Error cleaning up file: {e}")
+
         # Return FileResponse and cleanup after
-        return FileResponse(
-            temp_path,
-            media_type="audio/mpeg",
-            background=lambda: os.unlink(temp_path)  # Cleanup temp file after sending
-        )
-    return {"error": "Failed to generate speech", "content": [content.dict() for content in content_rankings]}
+        return FileResponse(temp_path, media_type="audio/mpeg", background=cleanup_file)
+    return {
+        "error": "Failed to generate speech",
+        "content": [content.dict() for content in content_rankings],
+    }
+
 
 @app.get("/get-decision")
-async def get_decision(user_input: str): 
+async def get_decision(user_input: str):
     global content_number
+    global content_rankings
+
+    # Check if we've reached the end of the content list
+    if content_number >= len(content_rankings):
+        content_number = 0  # Reset to start
+        # Optionally, you might want to fetch new content here
+        # news_data = get_update_news()
+        # ... update content_rankings ...
+
+        # Or return a message indicating no more content
+        return {
+            "error": "No more content available",
+            "action": "END",  # Or whatever action makes sense in your app
+        }
+
     client = OpenAI()
     handler = decisionHandler(client)
-    # for content in content_rankings:
-    #     if content.id == content_id:
-    #         next_content = content
-    #         break
-    next_content = content_rankings[content_number] # le back ce souvient de l'état du client c'est pas ouf
+
+    next_content = content_rankings[content_number]
     next_content = ContentEntity(
         id=len(content_rankings),
         title=next_content.title,
         summary=next_content.summary,
         link=next_content.link,
         date=next_content.date,
-        type="article",  # Default to article type
+        type=next_content.type,  # Default to article type
         passed=False,
-        shown=False
+        shown=False,
     )
+
     decision_output = handler.handle_decision(user_input, next_content)
-    content_number += 1
+
+    if decision_output.decision.action == "next":
+        content_number += 1  # Increment after using the current content
+
     if decision_output.sound:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_file:
+        # Create background tasks for cleanup
+        background_tasks = BackgroundTasks()
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
             temp_file.write(decision_output.sound)
             temp_path = temp_file.name
-            
+
+        background_tasks.add_task(os.unlink, temp_path)
+
         return FileResponse(
-            temp_path,
-            media_type="audio/mpeg",
-            background=lambda: os.unlink(temp_path)
+            temp_path, media_type="audio/mpeg", background=background_tasks
         )
-    
-    return {
-        "error": "No audio generated",
-        "action": decision_output.decision.action
-    }
+
+    return {"error": "No audio generated", "action": decision_output.decision.action}
+
 
 @app.get("/current-track-id")
 async def get_current_track_id() -> dict:
@@ -136,34 +171,35 @@ async def get_current_track_id() -> dict:
     # except ValueError as e:
     #     return {"error": str(e)}
 
+
 def get_spotify_track_id(url: str) -> str:
     """
     Extract the track ID from a Spotify URL.
-    
+
     Args:
         url (str): Spotify track URL in any of these formats:
             - https://open.spotify.com/track/1301WleyT98MSxVHPZCA6M
             - https://open.spotify.com/track/1301WleyT98MSxVHPZCA6M?si=12345
             - spotify:track:1301WleyT98MSxVHPZCA6M
-    
+
     Returns:
         str: The track ID if found, otherwise raises ValueError
     """
     # if url.startswith('spotify:track:'):
     #     return url.split(':')[-1]
-    
+
     # if 'spotify.com/track/' in url:
     #     track_part = url.split('track/')[-1]
     #     track_id = track_part.split('?')[0]
     #     track_id = track_id.rstrip('/')
     #     return track_id
-    
+
     # raise ValueError("Invalid Spotify URL format. Must be either a Spotify URI or web URL.")
 
-def get_current_played_content()->str:
+
+def get_current_played_content() -> str:
     global content_number
     return content_rankings[content_number]
-
 
 
 # @app.get("/youtube-summary/{video_id}")
@@ -202,21 +238,21 @@ def get_current_played_content()->str:
 #     try:
 #         audio_data = await file.read()
 #         text = speech_to_text(audio_data)
-        
+
 #         if text:
 #             return {"text": text}
 #         return {"error": "Failed to transcribe speech"}
 #     except Exception as e:
 #         return {"error": f"Error processing audio: {str(e)}"}
-    
+
 # @app.post("/workflow")
 # async def handle_workflow(user_input: InputUser):
 #     """Handle the AI workflow based on user input"""
 #     global content_rankings
-    
+
 #     if not content_rankings:
 #         await get_content()
-    
+
 #     try:
 #         result = ai_workflow(content_rankings, user_input.input)
 #         return {"status": "success", "result": result}
@@ -235,7 +271,7 @@ def get_current_played_content()->str:
 #     try:
 #         # Read the audio file
 #         audio_data = await file.read()
-        
+
 #         # Return streaming response
 #         return StreamingResponse(
 #             speech_to_text_stream(audio_data),
