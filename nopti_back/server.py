@@ -79,8 +79,7 @@ async def get_content():
     # Return audio response in same format as /hello endpoint
     current_content = content_rankings[content_number]
     speech_data = text_to_speech(
-        "Here is the first content of the day I recommend you to read : "
-        + current_content.summary
+        "Here is a content I recommend you : " + current_content.title
     )
 
     if speech_data:
@@ -124,22 +123,25 @@ async def get_decision(user_input: str):
     client = OpenAI()
     handler = decisionHandler(client)
 
-    next_content = content_rankings[content_number]
-    next_content = ContentEntity(
+    current_content = content_rankings[content_number]
+    current_content = ContentEntity(
         id=len(content_rankings),
-        title=next_content.title,
-        summary=next_content.summary,
-        link=next_content.link,
-        date=next_content.date,
-        type=next_content.type,  # Default to article type
+        title=current_content.title,
+        summary=current_content.summary,
+        link=current_content.link,
+        date=current_content.date,
+        type=current_content.type,  # Default to article type
         passed=False,
         shown=False,
     )
 
-    decision_output = handler.handle_decision(user_input, next_content)
+    decision_output = handler.handle_decision(user_input, current_content)
 
     if decision_output.decision.action == "next":
         content_number += 1  # Increment after using the current content
+
+    if decision_output.decision.action == "play":
+        return {"link": current_content.link}
 
     if decision_output.sound:
         # Create background tasks for cleanup
@@ -154,7 +156,6 @@ async def get_decision(user_input: str):
         return FileResponse(
             temp_path, media_type="audio/mpeg", background=background_tasks
         )
-
     return {"error": "No audio generated", "action": decision_output.decision.action}
 
 

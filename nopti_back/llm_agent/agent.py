@@ -30,7 +30,7 @@ class decisionHandler:
     def __init__(self, openai_client: OpenAI):
         self.openai_client = openai_client
 
-    def handle_decision(self, user_input: str, next_content: ContentEntity):
+    def handle_decision(self, user_input: str, current_content: ContentEntity):
         # Patch the OpenAI client with instructor
         #         client = instructor.from_openai( OpenAI(
         #     base_url="http://127.0.0.1:8111/v1",  # Assuming LLM Studio uses the /v1 endpoint
@@ -47,7 +47,7 @@ class decisionHandler:
         # )
         print(user_input)
         _next = bool(re.search(r"\b(next)\b", user_input, re.IGNORECASE))
-        _summarize = bool(re.search(r"\b(summarize)\b", user_input, re.IGNORECASE))
+        _summarize = bool(re.search(r"\b(summarise)\b", user_input, re.IGNORECASE))
         _play = bool(re.search(r"\b(play)\b", user_input, re.IGNORECASE))
 
         print(_next, _summarize, _play)
@@ -56,15 +56,17 @@ class decisionHandler:
             return DecisionOutput(sound=sound, decision=DecisionResponse(action="next"))
 
         if _summarize:
-            if next_content.type == "youtube":
-                video_id = next_content.link.split("v=")[1]
+            if current_content.type == "youtube":
+                video_id = current_content.link.split("v=")[1]
                 transcript = YouTubeTranscriptApi.get_transcript(
                     video_id, languages=["en", "fr"]
                 )
 
-                next_content.summary = " ".join([line["text"] for line in transcript])
+                current_content.summary = " ".join(
+                    [line["text"] for line in transcript]
+                )
 
-            text = summarize_text(next_content.title + next_content.summary)
+            text = summarize_text(current_content.title + current_content.summary)
             print(text)
 
             sound = text_to_speech(text)
@@ -73,7 +75,7 @@ class decisionHandler:
             )
 
         if _play:
-            sound = text_to_speech("Playing music: " + next_content.title)
+            sound = text_to_speech("Playing music: " + current_content.title)
             return DecisionOutput(sound=sound, decision=DecisionResponse(action="play"))
 
         sound = text_to_speech("I'm not sure what you want me to do.")
